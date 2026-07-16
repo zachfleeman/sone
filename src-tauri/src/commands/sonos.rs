@@ -327,9 +327,10 @@ pub async fn sonos_pause(state: State<'_, AppState>) -> Result<(), SoneError> {
     log::debug!("[sonos_pause]");
     let info = session_info(state.inner()).await?;
     let result = avtransport::pause(&state.sonos.client, &info.coordinator_ip).await;
-    // Only pause the scrobble clock if the speaker actually paused —
+    // Only pause the scrobble/report clock if the speaker actually paused —
     // otherwise the listen keeps running remotely while nothing is counted.
     if result.is_ok() {
+        state.tidal_reporter.on_pause().await;
         state.scrobble_manager.on_pause().await;
     }
     result
@@ -341,6 +342,7 @@ pub async fn sonos_resume(state: State<'_, AppState>) -> Result<(), SoneError> {
     let info = session_info(state.inner()).await?;
     let result = avtransport::play(&state.sonos.client, &info.coordinator_ip).await;
     if result.is_ok() {
+        state.tidal_reporter.on_resume().await;
         state.scrobble_manager.on_resume().await;
     }
     result
@@ -361,6 +363,7 @@ pub async fn sonos_seek(state: State<'_, AppState>, position_secs: f64) -> Resul
         state
             .discord
             .send(crate::discord::DiscordCommand::Seeked { position_secs });
+        state.tidal_reporter.on_seek().await;
         state.scrobble_manager.on_seek().await;
     }
     result
