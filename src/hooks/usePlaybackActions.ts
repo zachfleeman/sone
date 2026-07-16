@@ -66,6 +66,7 @@ import type {
   StreamInfo,
   ManualTrackSource,
   QueuedTrack,
+  PlaybackSource,
 } from "../types";
 import { getTidalImageUrl } from "../types";
 import { preloadImage } from "../components/TidalImage";
@@ -93,7 +94,11 @@ function normalizeTrack(raw: any): Track {
 /** Build the notify_track_started payload. Centralized so all call sites send the
  *  same fields — notably both `artist` (combined, for ListenBrainz) and
  *  `artistPrimary` (single primary, for Last.fm/Libre.fm). */
-function buildTrackStartedPayload(track: Track, chosenByUser: boolean) {
+function buildTrackStartedPayload(
+  track: Track,
+  chosenByUser: boolean,
+  source: PlaybackSource | null,
+) {
   return {
     artist: getTrackArtistDisplay(track),
     artistPrimary: getTrackPrimaryArtist(track),
@@ -105,6 +110,9 @@ function buildTrackStartedPayload(track: Track, chosenByUser: boolean) {
     chosenByUser,
     isrc: track.isrc || null,
     trackId: track.id || null,
+    // Container the play started from, for TIDAL play-reporting attribution.
+    sourceType: source?.type ?? null,
+    sourceId: source != null ? String(source.id) : null,
   };
 }
 
@@ -361,6 +369,7 @@ export function usePlaybackActions() {
             payload: buildTrackStartedPayload(
               stamped,
               opts?.chosenByUser ?? true,
+              store.get(playbackSourceAtom),
             ),
           }).catch(() => {});
         }
@@ -467,7 +476,11 @@ export function usePlaybackActions() {
         if (finishedRemotely) {
           notifySeek(0);
           invoke("notify_track_started", {
-            payload: buildTrackStartedPayload(track, true),
+            payload: buildTrackStartedPayload(
+              track,
+              true,
+              store.get(playbackSourceAtom),
+            ),
           }).catch(() => {});
         }
         return;
@@ -492,7 +505,11 @@ export function usePlaybackActions() {
 
         // Notify backend so the replay is scrobbled
         invoke("notify_track_started", {
-          payload: buildTrackStartedPayload(track, true),
+          payload: buildTrackStartedPayload(
+            track,
+            true,
+            store.get(playbackSourceAtom),
+          ),
         }).catch(() => {});
       } else {
         await invoke("resume_track");
@@ -580,7 +597,11 @@ export function usePlaybackActions() {
       // the gate can't stay stuck and freeze the position bar on this new track.
       markPlaybackLoading(false);
       invoke("notify_track_started", {
-        payload: buildTrackStartedPayload(stamped, false),
+        payload: buildTrackStartedPayload(
+          stamped,
+          false,
+          store.get(playbackSourceAtom),
+        ),
       }).catch(() => {});
     },
     [store],
@@ -661,7 +682,11 @@ export function usePlaybackActions() {
         store.set(isPlayingAtom, !store.get(userPausedAtom));
         markPlaybackLoading(false);
         invoke("notify_track_started", {
-          payload: buildTrackStartedPayload(target, true),
+          payload: buildTrackStartedPayload(
+            target,
+            true,
+            store.get(playbackSourceAtom),
+          ),
         }).catch(() => {});
         return true;
       }
@@ -1003,7 +1028,11 @@ export function usePlaybackActions() {
               // Restart from 0; clears the load gate and re-emits to the miniplayer.
               notifySeek(0);
               invoke("notify_track_started", {
-                payload: buildTrackStartedPayload(current, false),
+                payload: buildTrackStartedPayload(
+                  current,
+                  false,
+                  store.get(playbackSourceAtom),
+                ),
               }).catch(() => {});
             } catch (error: any) {
               markPlaybackLoading(false);
@@ -1382,7 +1411,11 @@ export function usePlaybackActions() {
 
           // Notify backend for scrobbling
           invoke("notify_track_started", {
-            payload: buildTrackStartedPayload(prevTrack, true),
+            payload: buildTrackStartedPayload(
+              prevTrack,
+              true,
+              store.get(playbackSourceAtom),
+            ),
           }).catch(() => {});
         } catch (error: any) {
           // Rollback all state
@@ -1505,7 +1538,11 @@ export function usePlaybackActions() {
 
               // Notify backend for scrobbling
               invoke("notify_track_started", {
-                payload: buildTrackStartedPayload(prevTrack, true),
+                payload: buildTrackStartedPayload(
+                  prevTrack,
+                  true,
+                  store.get(playbackSourceAtom),
+                ),
               }).catch(() => {});
             } catch (error: any) {
               // Rollback all state
